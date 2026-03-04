@@ -54,6 +54,7 @@ kreativ-education/
 │   ├── N8N_INTEGRATION.md       ← 14 ações N8N ↔ Frappe
 │   ├── WHATSAPP_INTEGRATION.md  ← Evolution + Typebot + Chatwoot
 │   ├── CONTAINER_APIS.md        ← Referência de todas as APIs dos containers
+│   ├── LOCAL_DEVELOPMENT.md     ← Como rodar no seu PC com Ngrok
 │   ├── ARCHITECTURE.md
 │   ├── DEPLOYMENT_GUIDE.md
 │   ├── CAPACITY_PLANNING.md
@@ -97,6 +98,7 @@ Se você é uma IA (Gemini, Claude, Cursor) trabalhando neste repo:
 
 | Documento | Descrição |
 |-----------|-----------|
+| [LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) | Como rodar a stack no seu PC local com Tunnels (Ngrok) |
 | [CONTAINER_APIS.md](docs/CONTAINER_APIS.md) | Guia unificado de Endpoints, IPs e Auth de todos containers |
 | [COURSE_CREATION_API.md](docs/COURSE_CREATION_API.md) | Criar cursos, capítulos, lições e quizzes via API |
 | [N8N_INTEGRATION.md](docs/N8N_INTEGRATION.md) | 14 ações N8N ↔ Frappe + transbordo Chatwoot |
