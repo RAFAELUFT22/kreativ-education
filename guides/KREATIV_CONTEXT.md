@@ -2,7 +2,7 @@
 
 ## O Projeto
 
-**Kreativ Educação** (anteriormente TDS — Transformação Digital Solidária) é um projeto educacional que oferece cursos de empreendedorismo, boas práticas e organização produtiva para **comunidades periféricas no Brasil**, especialmente no Norte do país (Roraima).
+**Kreativ Educação** (anteriormente TDS — Territórios de Desenvolvimento Social e Inclusão Produtiva) é um projeto educacional que oferece cursos de empreendedorismo, boas práticas e organização produtiva para **comunidades carentes no Brasil**, especialmente no Norte do país (Tocantins).
 
 ### Público-Alvo
 
