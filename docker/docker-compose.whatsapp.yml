@@ -117,7 +117,9 @@ services:
   # ---------------------------------------------------------------------------
 
   n8n:
-    image: n8nio/n8n:latest
+    build:
+      context: ./n8n
+      dockerfile: Dockerfile
     container_name: kreativ_n8n
     restart: always
     environment:

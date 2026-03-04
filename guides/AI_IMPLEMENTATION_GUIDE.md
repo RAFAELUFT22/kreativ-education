@@ -210,6 +210,15 @@ O workflow N8N "Kreativ API Ultimate" chama o Frappe via 6 ações:
 | `emit_certificate` | POST | `/api/method/lms.lms.utils.generate_certificate` |
 | `enroll_student` | POST | `/api/resource/LMS Enrollment` |
 
+### 🤖 Diretrizes MCP (Para Agentes de IA)
+
+Para modificar os workflows N8N, aja segundo este protocolo:
+1. **O Docker é Customizado:** A imagem `kreativ_n8n` não é stock. Usamos `docker/n8n/Dockerfile` para pré-instalar pacotes `n8n-nodes-evolution` e `n8n-nodes-chatwoot`.
+2. **Use Tooling do MCP:** NUNCA crie automações com nós *HTTP Request* genéricos para WhatsApp ou Chatwoot.
+3. **Descubra as Estruturas:** Como IA, use `mcp_n8n-mcp_get_node(nodeType="...", mode="docs")` para aprender como usar os nós comunitários instalados.
+4. **Valide:** Valide seus workflows via `mcp_n8n-mcp_validate_workflow` ANTES de entregar o JSON pro usuário.
+Veja as instruções detalhadas e lista de 14 ações na doc inteira (`docs/N8N_INTEGRATION.md`).
+
 ### Bridge Phone → Email
 
 Alunos acessam via WhatsApp (telefone). No Frappe, usuários são identificados por email.

@@ -201,4 +201,29 @@ O N8N consulta esta tabela antes de qualquer chamada ao Frappe para resolver o `
 
 ---
 
+## Instruções para Agentes IA (via N8N MCP)
+
+Este repositório foi construído para ser o ponto de partida **end-to-end** ("start to finish" deployment). A stack Docker já inclui (`docker/n8n/Dockerfile`) os pacotes da comunidade pré-instalados:
+- `@n8n-nodes-evolution/evolution` (Evolution API V2)
+- `n8n-nodes-chatwoot` (Chatwoot API)
+
+### Como usar o MCP para otimizar os fluxos
+
+Como assistente de IA conectado ao MCP do N8N (`n8n-mcp`), você deve seguir este protocolo ao criar ou melhorar estes conectores:
+
+1. **Evite `HTTP Request` Cru onde possível:** 
+   O código legado de 2025 usava mais de 30 blocos `HTTP Request` para Chatwoot e Evolution. Isso gera JSONs de workflow frágeis.
+2. **Descubra as Propridades dos Nós:**
+   Em vez de adivinhar parâmetros para Chatwoot ou Evolution, use a tool de MCP `mcp_n8n-mcp_get_node` com `mode='docs'` ou `detail='full'`.
+   Exemplo prático de tool call:
+   `mcp_n8n-mcp_get_node(nodeType="n8n-nodes-chatwoot.chatwoot", mode="docs")`
+3. **Migração do Transbordo Lógico:**
+   O fluxo `request_human` listado acima deve ser reconstruído nos novos layouts usando os nós específicos:
+   - Em vez de fazer PUT/POST manual: use o node `n8n-nodes-chatwoot.chatwoot` com a action `conversation` -> `create`.
+4. **Validando os Configs:**
+   Sempre use a tool `mcp_n8n-mcp_validate_node` passando o `nodeType` recém descoberto e o `config` pretendido em `mode="full"` antes de exportar o workflow.
+   Isso garantirá que o JSON a ser gerado funcionará perfeitamente quando o humano fizer o "Import Workflow" na UI.
+
+---
+
 *Última atualização: 2026-03-04*
