@@ -1,0 +1,334 @@
+# =============================================================================
+# Kreativ Education — Stack WhatsApp + Automação
+#
+# Complementa docker/docker-compose.yml (Frappe LMS) com:
+#   - Evolution API (WhatsApp)
+#   - Typebot (bot visual)
+#   - N8N (automação)
+#   - Chatwoot (transbordo humano)
+#   - PostgreSQL (pgvector + bridge)
+#   - Redis (compartilhado)
+#   - MinIO (storage)
+#   - Postfix (SMTP)
+#
+# REQUISITOS ADICIONAIS: ~3GB RAM além do Frappe LMS (5.9GB)
+# TOTAL STACK COMPLETO: ~8.8GB → VPS mínima 16GB RAM
+#
+# DEPLOY:
+#   docker compose -f docker/docker-compose.yml up -d           # Frappe LMS
+#   docker compose -f docker/docker-compose.whatsapp.yml up -d  # WhatsApp stack
+# =============================================================================
+
+networks:
+  kreativ_net:
+    name: kreativ_education_net
+    external: true
+  coolify:
+    name: coolify
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+  evolution_data:
+  minio_data:
+
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # INFRAESTRUTURA COMPARTILHADA
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: kreativ_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DATABASE}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - kreativ_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DATABASE}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kreativ_redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    networks:
+      - kreativ_net
+
+  # ---------------------------------------------------------------------------
+  # WHATSAPP: Evolution API v2 + Meta Cloud API
+  # https://evolution.extensionista.site
+  # ---------------------------------------------------------------------------
+
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: kreativ_evolution
+    restart: always
+    environment:
+      SERVER_PORT: 8080
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${PG_USER}:${PG_PASSWORD}@kreativ_postgres:5432/${EVOLUTION_DB:-evolution_db}
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      REDIS_ENABLED: "true"
+      REDIS_URI: redis://:${REDIS_PASSWORD}@kreativ_redis:6379/1
+      CHATWOOT_ENABLED: "true"
+      CHATWOOT_MESSAGE_READ: "true"
+      CHATWOOT_BOT_CONTACT: "true"
+      LOG_LEVEL: WARN
+    volumes:
+      - evolution_data:/evolution/instances
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-evolution.rule=Host(`evolution.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-evolution.entrypoints=https"
+      - "traefik.http.routers.kreativ-evolution.tls=true"
+      - "traefik.http.routers.kreativ-evolution.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-evolution.loadbalancer.server.port=8080"
+      - "traefik.docker.network=coolify"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # AUTOMAÇÃO: N8N
+  # https://n8n.extensionista.site
+  # ---------------------------------------------------------------------------
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: kreativ_n8n
+    restart: always
+    environment:
+      N8N_HOST: n8n.${DOMAIN:-extensionista.site}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.${DOMAIN:-extensionista.site}
+      N8N_EDITOR_BASE_URL: https://n8n.${DOMAIN:-extensionista.site}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_DATABASE: ${PG_DATABASE}
+      DB_POSTGRESDB_HOST: kreativ_postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_USER: ${PG_USER}
+      DB_POSTGRESDB_PASSWORD: ${PG_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_AI_ENABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ENABLED: "true"
+      NODE_FUNCTION_ALLOW_BUILTIN: "*"
+      NODE_FUNCTION_ALLOW_EXTERNAL: "*"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168
+      NODE_OPTIONS: "--max-old-space-size=2048"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-n8n.rule=Host(`n8n.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-n8n.entrypoints=https"
+      - "traefik.http.routers.kreativ-n8n.tls=true"
+      - "traefik.http.routers.kreativ-n8n.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-n8n.loadbalancer.server.port=5678"
+      - "traefik.docker.network=coolify"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # BOT VISUAL: Typebot v6
+  # Builder: https://typebot.extensionista.site
+  # Viewer: https://bot.extensionista.site
+  # ---------------------------------------------------------------------------
+
+  typebot-builder:
+    image: baptistearno/typebot-builder:latest
+    container_name: kreativ_typebot_builder
+    restart: always
+    environment:
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://${PG_USER}:${PG_PASSWORD}@kreativ_postgres:5432/typebot_db
+      NEXTAUTH_URL: https://typebot.${DOMAIN:-extensionista.site}
+      NEXTAUTH_TRUST_HOST: "true"
+      NEXTAUTH_SECRET: ${TYPEBOT_NEXTAUTH_SECRET}
+      ENCRYPTION_SECRET: ${TYPEBOT_ENCRYPTION_SECRET}
+      ADMIN_EMAIL: ${TYPEBOT_ADMIN_EMAIL:-admin@extensionista.site}
+      NEXT_PUBLIC_VIEWER_URL: https://bot.${DOMAIN:-extensionista.site}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: typebot
+      S3_ENDPOINT: s3.${DOMAIN:-extensionista.site}
+      S3_SSL: "true"
+      DISABLE_TELEMETRY: "true"
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-typebot.rule=Host(`typebot.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-typebot.entrypoints=https"
+      - "traefik.http.routers.kreativ-typebot.tls=true"
+      - "traefik.http.routers.kreativ-typebot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-typebot.loadbalancer.server.port=3000"
+      - "traefik.docker.network=coolify"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  typebot-viewer:
+    image: baptistearno/typebot-viewer:latest
+    container_name: kreativ_typebot_viewer
+    restart: always
+    environment:
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: postgresql://${PG_USER}:${PG_PASSWORD}@kreativ_postgres:5432/typebot_db
+      NEXTAUTH_URL: https://bot.${DOMAIN:-extensionista.site}
+      NEXTAUTH_TRUST_HOST: "true"
+      NEXTAUTH_SECRET: ${TYPEBOT_NEXTAUTH_SECRET}
+      ENCRYPTION_SECRET: ${TYPEBOT_ENCRYPTION_SECRET}
+      NEXT_PUBLIC_VIEWER_URL: https://bot.${DOMAIN:-extensionista.site}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: typebot
+      S3_ENDPOINT: s3.${DOMAIN:-extensionista.site}
+      S3_SSL: "true"
+      DISABLE_TELEMETRY: "true"
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-typebot-viewer.rule=Host(`bot.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-typebot-viewer.entrypoints=https"
+      - "traefik.http.routers.kreativ-typebot-viewer.tls=true"
+      - "traefik.http.routers.kreativ-typebot-viewer.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-typebot-viewer.loadbalancer.server.port=3000"
+      - "traefik.docker.network=coolify"
+    depends_on:
+      typebot-builder:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # TRANSBORDO HUMANO: Chatwoot v4.11
+  # https://suporte.extensionista.site
+  # ---------------------------------------------------------------------------
+
+  chatwoot-app:
+    image: chatwoot/chatwoot:v4.11.0
+    container_name: kreativ_chatwoot_app
+    restart: always
+    command: sh -c "rm -f /app/tmp/pids/server.pid && bundle exec rails s -p 3000 -b 0.0.0.0"
+    environment: &chatwoot_env
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY}
+      FRONTEND_URL: https://suporte.${DOMAIN:-extensionista.site}
+      DEFAULT_LOCALE: pt_BR
+      FORCE_SSL: "false"
+      REDIS_URL: redis://:${REDIS_PASSWORD}@kreativ_redis:6379/3
+      POSTGRES_HOST: kreativ_postgres
+      POSTGRES_RECONNECT: "true"
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: chatwoot_db
+      POSTGRES_USERNAME: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      ACTIVE_STORAGE_SERVICE: local
+      INSTALLATION_ENV: docker
+      CW_AI_ENABLED: "true"
+      INSTALLATION_NAME: KreativEdu
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LOG_LEVEL: warn
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-chatwoot.rule=Host(`suporte.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-chatwoot.entrypoints=https"
+      - "traefik.http.routers.kreativ-chatwoot.tls=true"
+      - "traefik.http.routers.kreativ-chatwoot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-chatwoot.loadbalancer.server.port=3000"
+      - "traefik.docker.network=coolify"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  chatwoot-sidekiq:
+    image: chatwoot/chatwoot:v4.11.0
+    container_name: kreativ_chatwoot_sidekiq
+    restart: always
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    environment: *chatwoot_env
+    networks:
+      - kreativ_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # STORAGE: MinIO
+  # Console: https://files.extensionista.site
+  # API S3: https://s3.extensionista.site
+  # ---------------------------------------------------------------------------
+
+  minio:
+    image: minio/minio:latest
+    container_name: kreativ_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: https://files.${DOMAIN:-extensionista.site}
+    volumes:
+      - minio_data:/data
+    networks:
+      - kreativ_net
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-minio.rule=Host(`files.${DOMAIN:-extensionista.site}`)"
+      - "traefik.http.routers.kreativ-minio.entrypoints=https"
+      - "traefik.http.routers.kreativ-minio.tls=true"
+      - "traefik.http.routers.kreativ-minio.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-minio.loadbalancer.server.port=9001"
+      - "traefik.docker.network=coolify"
+
+  # ---------------------------------------------------------------------------
+  # SMTP: Postfix
+  # ---------------------------------------------------------------------------
+
+  postfix:
+    image: boky/postfix:latest
+    container_name: kreativ_postfix
+    restart: always
+    environment:
+      HOSTNAME: mail.${DOMAIN:-extensionista.site}
+      ALLOWED_SENDER_DOMAINS: ${DOMAIN:-extensionista.site}
+      POSTFIX_myhostname: mail.${DOMAIN:-extensionista.site}
+      POSTFIX_mydomain: ${DOMAIN:-extensionista.site}
+      POSTFIX_myorigin: ${DOMAIN:-extensionista.site}
+      POSTFIX_inet_interfaces: all
+    networks:
+      - kreativ_net

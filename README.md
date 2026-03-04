@@ -31,6 +31,8 @@ open https://lms.SEU-DOMINIO.com
 
 ```
 WhatsApp → Evolution API → Typebot → N8N → Frappe LMS (REST API) → MariaDB
+                                      ↓
+                                 Chatwoot (transbordo humano)
 ```
 
 **Frappe LMS** é a fonte da verdade para: cursos, capítulos, lições, quizzes, matrículas e certificados.
@@ -43,10 +45,14 @@ WhatsApp → Evolution API → Typebot → N8N → Frappe LMS (REST API) → Mar
 
 ```
 kreativ-education/
-├── docker/              # Dockerfile + docker-compose (9 serviços)
+├── docker/              # Infraestrutura Docker
+│   ├── docker-compose.yml           # Frappe LMS (9 serviços)
+│   └── docker-compose.whatsapp.yml  # WhatsApp stack (10 serviços)
 ├── scripts/             # setup.sh, health-check.sh, seed-courses.py
 ├── docs/                # Documentação técnica completa
-│   ├── COURSE_CREATION_API.md   ← Como criar cursos via API
+│   ├── COURSE_CREATION_API.md   ← API REST para cursos
+│   ├── N8N_INTEGRATION.md       ← 14 ações N8N ↔ Frappe
+│   ├── WHATSAPP_INTEGRATION.md  ← Evolution + Typebot + Chatwoot
 │   ├── ARCHITECTURE.md
 │   ├── DEPLOYMENT_GUIDE.md
 │   ├── CAPACITY_PLANNING.md
@@ -91,6 +97,8 @@ Se você é uma IA (Gemini, Claude, Cursor) trabalhando neste repo:
 | Documento | Descrição |
 |-----------|-----------|
 | [COURSE_CREATION_API.md](docs/COURSE_CREATION_API.md) | Criar cursos, capítulos, lições e quizzes via API |
+| [N8N_INTEGRATION.md](docs/N8N_INTEGRATION.md) | 14 ações N8N ↔ Frappe + transbordo Chatwoot |
+| [WHATSAPP_INTEGRATION.md](docs/WHATSAPP_INTEGRATION.md) | Evolution API + Typebot + Chatwoot |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Diagrama e componentes |
 | [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Deploy passo a passo |
 | [CAPACITY_PLANNING.md](docs/CAPACITY_PLANNING.md) | Requisitos de RAM/CPU |
