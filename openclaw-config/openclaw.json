@@ -1,0 +1,21 @@
+{
+  "models": {
+    "providers": {
+      "ollama_local": {
+        "api": "ollama",
+        "baseUrl": "http://46.202.150.132:11434",
+        "models": [
+          { "id": "gpt-oss:120b-cloud", "name": "GPT-OSS Cloud" },
+          { "id": "deepseek-v3.1:671b-cloud", "name": "DeepSeek Cloud" }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama_local/gpt-oss:120b-cloud"
+      }
+    }
+  }
+}
