@@ -164,6 +164,9 @@ services:
     environment:
       - PORT=3001
       - STORAGE_DIR=/app/server/storage
+      - DISABLE_TELEMETRY=true
+    expose:
+      - "3001"
     volumes:
       - anythingllm_storage:/app/server/storage
     networks:
