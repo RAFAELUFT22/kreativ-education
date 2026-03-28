@@ -1,0 +1,142 @@
+version: '3.8'
+
+networks:
+  frappe_net:
+    name: kreativ_frappe_net
+    driver: bridge
+  dokploy-network:
+    external: true
+
+volumes:
+  frappe_mariadb_data:
+    name: kreativ_frappe_mariadb
+  frappe_sites_data:
+    name: kreativ_frappe_sites
+  frappe_logs_data:
+    name: kreativ_frappe_logs
+  frappe_assets_data:
+    name: kreativ_frappe_assets
+
+services:
+
+  frappe-mariadb:
+    image: mariadb:10.6
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --max_allowed_packet=256M
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: frappe_kreativ
+      MYSQL_USER: frappe
+      MYSQL_PASSWORD: ${MARIADB_FRAPPE_PASSWORD}
+    volumes:
+      - frappe_mariadb_data:/var/lib/mysql
+    networks:
+      - frappe_net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frappe-redis:
+    image: redis:7-alpine
+    restart: always
+    networks:
+      - frappe_net
+
+  frappe-backend:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    environment:
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME:-lms.ipexdesenvolvimento.cloud}
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
+      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
+    networks:
+      - frappe_net
+    depends_on:
+      frappe-mariadb:
+        condition: service_healthy
+
+  frappe-socketio:
+    image: frappe/frappe-socketio:latest
+    restart: always
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe_net
+    depends_on:
+      - frappe-backend
+
+  frappe-scheduler:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench schedule
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe_net
+    depends_on:
+      - frappe-backend
+
+  frappe-worker-default:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue default
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe_net
+    depends_on:
+      - frappe-backend
+
+  frappe-worker-short:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue short
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe_net
+    depends_on:
+      - frappe-backend
+
+  frappe-worker-long:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue long
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - frappe_net
+    depends_on:
+      - frappe-backend
+
+  frappe-frontend:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: /usr/local/bin/nginx-entrypoint.sh
+    environment:
+      BACKEND: frappe-backend:8000
+      SOCKETIO: frappe-socketio:9000
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME:-lms.ipexdesenvolvimento.cloud}
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
+    networks:
+      - frappe_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-lms.rule=Host(`lms.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.kreativ-lms.entrypoints=websecure"
+      - "traefik.http.routers.kreativ-lms.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-lms.loadbalancer.server.port=8080"
+      - "traefik.docker.network=dokploy-network"
+    depends_on:
+      - frappe-socketio

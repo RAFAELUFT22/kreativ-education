@@ -1,0 +1,28 @@
+version: '3.8'
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  postgres_data:
+    name: kreativ_postgres_data
+
+services:
+  kreativ-postgres:
+    image: postgres:16-alpine
+    container_name: kreativ-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${PG_USER:-kreativ}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: kreativ_n8n,kreativ_evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-kreativ}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

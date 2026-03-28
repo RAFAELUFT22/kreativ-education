@@ -1,0 +1,187 @@
+{
+  "name": "Kreativ TDS — WhatsApp RAG Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "phone",
+              "name": "phoneNumber",
+              "value": "={{ $json.data.key.remoteJid.split('@')[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "text",
+              "name": "messageText",
+              "value": "={{ $json.data.message.conversation || $json.data.message.extendedTextMessage.text }}",
+              "type": "string"
+            },
+            {
+              "id": "instance",
+              "name": "instance",
+              "value": "={{ $json.instance }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "node-extract",
+      "name": "Extrair Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond-prova",
+              "leftValue": "={{ $json.messageText }}",
+              "rightValue": "prova|exame|certificado",
+              "operator": { "type": "string", "operation": "regex" }
+            }
+          ]
+        }
+      },
+      "id": "node-check-keywords",
+      "name": "É Prova/Exame?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://kreativ-anythingllm:3001/api/v1/workspace/tds/chat",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{ $env.ANYTHINGLLM_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message", "value": "={{ $json.messageText }}" },
+            { "name": "mode", "value": "chat" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-rag",
+      "name": "Consultar RAG (AnythingLLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://kreativ-evolution:8080/message/sendText/{{ $('Extrair Dados').item.json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $('Extrair Dados').item.json.phoneNumber }}" },
+            { "name": "text", "value": "={{ $json.textResponse }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-send-rag",
+      "name": "Enviar Resposta RAG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://kreativ-evolution:8080/message/sendText/{{ $('Extrair Dados').item.json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $('Extrair Dados').item.json.phoneNumber }}" },
+            { "name": "text", "value": "Entendido! Vou te conectar com um tutor para iniciar sua avaliação. Aguarde um momento... 📝" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-notify-tutor",
+      "name": "Notificar Tutor (Prova)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "node-response",
+      "name": "Resposta HTTP 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Evolution": {
+      "main": [[{ "node": "Extrair Dados", "type": "main", "index": 0 }]]
+    },
+    "Extrair Dados": {
+      "main": [[{ "node": "É Prova/Exame?", "type": "main", "index": 0 }]]
+    },
+    "É Prova/Exame?": {
+      "main": [
+        [{ "node": "Consultar RAG (AnythingLLM)", "type": "main", "index": 0 }],
+        [{ "node": "Notificar Tutor (Prova)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Consultar RAG (AnythingLLM)": {
+      "main": [[{ "node": "Enviar Resposta RAG", "type": "main", "index": 0 }]]
+    },
+    "Enviar Resposta RAG": {
+      "main": [[{ "node": "Resposta HTTP 200", "type": "main", "index": 0 }]]
+    },
+    "Notificar Tutor (Prova)": {
+      "main": [[{ "node": "Resposta HTTP 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateId": "kreativ-tds-whatsapp-rag-v1"
+  }
+}

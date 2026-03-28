@@ -1,0 +1,36 @@
+version: '3.8'
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  anythingllm_storage:
+    name: kreativ_anythingllm_storage
+
+services:
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    restart: always
+    environment:
+      - PORT=3001
+      - STORAGE_DIR=/app/server/storage
+      # LLM: Ollama Cloud (VPS GPU)
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_PATH=http://ollama:11434
+      - OLLAMA_MODEL_PREF=qwen2.5-coder:7b
+      # Embedding
+      - EMBEDDING_ENGINE=ollama
+      - EMBEDDING_MODEL_PREF=qwen2.5-coder:7b
+      - OLLAMA_EMBEDDING_BASE_PATH=http://ollama:11434
+    volumes:
+      - anythingllm_storage:/app/server/storage
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kreativ-rag.rule=Host(`rag.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.kreativ-rag.entrypoints=websecure"
+      - "traefik.http.routers.kreativ-rag.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kreativ-rag.loadbalancer.server.port=3001"
+      - "traefik.docker.network=dokploy-network"
