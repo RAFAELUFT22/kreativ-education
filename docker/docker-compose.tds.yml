@@ -169,14 +169,6 @@ services:
     networks:
       - kreativ_net
       - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-rag.rule=Host(`rag.ipexdesenvolvimento.cloud`)"
-      - "traefik.http.routers.tds-rag.entrypoints=websecure"
-      - "traefik.http.routers.tds-rag.tls=true"
-      - "traefik.http.routers.tds-rag.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-rag.loadbalancer.server.port=3001"
-      - "traefik.docker.network=dokploy-network"
 
   # --- AUTOMATION SERVICES (N8N / EVOLUTION) ---
 
