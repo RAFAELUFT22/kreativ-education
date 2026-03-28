@@ -1,34 +1,34 @@
 # =============================================================================
-# Kreativ Education — Frappe LMS Docker Image
-#
-# Baseado na imagem oficial ERPNext v15 + app LMS (Frappe Learning)
-# Pré-instala dependências do frontend para evitar OOM em runtime
+# Kreativ Education — Frappe LMS Docker Image (V3 - Build Fix)
 # =============================================================================
 
 FROM frappe/erpnext:version-15
 
-LABEL maintainer="Kreativ Educação <admin@extensionista.site>"
-LABEL description="Frappe LMS (Learning Management System) for Kreativ Education"
-LABEL version="2.44.0"
-
 USER root
+
+# Instalar dependências e preparar o ambiente
 RUN chown -R frappe:frappe \
     /home/frappe/frappe-bench/env \
     /home/frappe/frappe-bench/apps \
     /home/frappe/frappe-bench/sites
 
 USER frappe
+WORKDIR /home/frappe/frappe-bench
 
-# Clonar o app LMS e instalar dependências Python
-RUN git clone --depth 1 --branch develop \
-    https://github.com/frappe/lms.git \
-    /home/frappe/frappe-bench/apps/lms && \
-    cd /home/frappe/frappe-bench && \
-    env/bin/pip install -e apps/lms && \
-    echo "frappe"  >  sites/apps.txt && \
-    echo "erpnext" >> sites/apps.txt && \
-    echo "lms"     >> sites/apps.txt
+# Criar common_site_config.json temporário para satisfazer o build do frontend
+RUN echo '{"socketio_port": 9000}' > sites/common_site_config.json
 
-# Pré-instalar dependências do frontend (evita OOM ao rodar bench build em runtime)
+# Baixar apps necessários
+RUN bench get-app payments --branch version-15 && \
+    bench get-app lms --branch develop
+
+# Pré-instalar dependências do frontend do LMS
 RUN cd /home/frappe/frappe-bench/apps/lms/frontend && \
     yarn install --frozen-lockfile 2>/dev/null || yarn install
+
+# Garantir que os apps estejam listados para instalação
+RUN echo "payments" >> sites/apps.txt && \
+    echo "lms"      >> sites/apps.txt
+
+# Remover o config temporário para não conflitar com volumes em runtime
+RUN rm sites/common_site_config.json

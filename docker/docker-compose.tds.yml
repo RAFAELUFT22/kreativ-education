@@ -1,6 +1,8 @@
 # =============================================================================
-# PROJETO TDS — Manifesto Unificado (Frappe LMS + IA + WhatsApp)
+# PROJETO TDS — Manifesto Final (Full Connectivity & Worker Fix)
 # =============================================================================
+
+version: '3.8'
 
 networks:
   kreativ_net:
@@ -11,12 +13,10 @@ networks:
     external: true
 
 volumes:
-  # Frappe Persistence
   frappe_mariadb_data:
   frappe_sites_data:
   frappe_logs_data:
   frappe_assets_data:
-  # IA & Automation Persistence
   anythingllm_storage:
   openclaw_data:
   postgres_data:
@@ -26,174 +26,8 @@ volumes:
 
 services:
 
-  # ---------------------------------------------------------------------------
-  # CORE: Frappe LMS (MariaDB + Backend + Frontend)
-  # ---------------------------------------------------------------------------
-  frappe_mariadb:
-    image: mariadb:10.6
-    container_name: t_core_mariadb
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
-      MYSQL_DATABASE: frappe_kreativ
-      MYSQL_USER: frappe
-      MYSQL_PASSWORD: ${MARIADB_FRAPPE_PASSWORD}
-    volumes:
-      - frappe_mariadb_data:/var/lib/mysql
-    networks:
-      - kreativ_net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  frappe_backend:
-    image: kreativ_frappe_lms:latest
-    container_name: t_core_backend
-    restart: unless-stopped
-    volumes:
-      - frappe_sites_data:/home/frappe/frappe-bench/sites
-      - frappe_logs_data:/home/frappe/frappe-bench/logs
-      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
-    environment:
-      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
-    networks:
-      - kreativ_net
-    depends_on:
-      frappe_mariadb:
-        condition: service_healthy
-
-  frappe_frontend:
-    image: kreativ_frappe_lms:latest
-    container_name: t_core_frontend
-    restart: unless-stopped
-    command: /usr/local/bin/nginx-entrypoint.sh
-    environment:
-      BACKEND: frappe_backend:8000
-      SOCKETIO: frappe_socketio:9000
-      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
-    volumes:
-      - frappe_sites_data:/home/frappe/frappe-bench/sites
-      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
-    networks:
-      - kreativ_net
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-lms.rule=Host(`lms.${DOMAIN}`)"
-      - "traefik.http.routers.tds-lms.entrypoints=https"
-      - "traefik.http.routers.tds-lms.tls=true"
-      - "traefik.http.routers.tds-lms.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-lms.loadbalancer.server.port=8080"
-      - "traefik.docker.network=dokploy-network"
-
-  # ---------------------------------------------------------------------------
-  # MOTOR DE RAG: AnythingLLM
-  # ---------------------------------------------------------------------------
-  anythingllm:
-    image: mintplexlabs/anything-llm:latest
-    container_name: t_rag_anythingllm
-    restart: always
-    environment:
-      - SERVER_PORT=3001
-      - STORAGE_DIR=/app/server/storage
-    volumes:
-      - anythingllm_storage:/app/server/storage
-    networks:
-      - kreativ_net
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-rag.rule=Host(`rag.${DOMAIN}`)"
-      - "traefik.http.routers.tds-rag.entrypoints=https"
-      - "traefik.http.routers.tds-rag.tls=true"
-      - "traefik.http.routers.tds-rag.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-rag.loadbalancer.server.port=3001"
-      - "traefik.docker.network=dokploy-network"
-
-  # ---------------------------------------------------------------------------
-  # AGENTE AUTÔNOMO: OpenClaw
-  # ---------------------------------------------------------------------------
-  openclaw:
-    image: coollabsio/openclaw:latest
-    container_name: t_agent_openclaw
-    restart: always
-    environment:
-      - OLLAMA_BASE_URL=http://46.202.150.132:11434
-      - OPENCLAW_PRIMARY_MODEL=ollama/gpt-oss:120b-cloud
-      - PORT=8080
-    volumes:
-      - openclaw_data:/data
-      - ../openclaw-config/openclaw.json:/data/.openclaw/openclaw.json
-    networks:
-      - kreativ_net
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-agent.rule=Host(`agent.${DOMAIN}`)"
-      - "traefik.http.routers.tds-agent.entrypoints=https"
-      - "traefik.http.routers.tds-agent.tls=true"
-      - "traefik.http.routers.tds-agent.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-agent.loadbalancer.server.port=8080"
-      - "traefik.docker.network=dokploy-network"
-
-  # ---------------------------------------------------------------------------
-  # WHATSAPP & AUTOMAÇÃO: Evolution API + N8N
-  # ---------------------------------------------------------------------------
-  evolution-api:
-    image: atendai/evolution-api:latest
-    container_name: t_whatsapp_evolution
-    restart: always
-    environment:
-      SERVER_PORT: 8080
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      DATABASE_ENABLED: "true"
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/${EVOLUTION_DB}
-    networks:
-      - kreativ_net
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-evolution.rule=Host(`evolution.${DOMAIN}`)"
-      - "traefik.http.routers.tds-evolution.entrypoints=https"
-      - "traefik.http.routers.tds-evolution.tls=true"
-      - "traefik.http.routers.tds-evolution.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-evolution.loadbalancer.server.port=8080"
-
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: t_logic_n8n
-    restart: always
-    environment:
-      N8N_HOST: n8n.${DOMAIN}
-      N8N_PORT: 5678
-      N8N_PROTOCOL: https
-      WEBHOOK_URL: https://n8n.${DOMAIN}
-      DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres
-      DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_USER: ${PG_USER}
-      DB_POSTGRESDB_PASSWORD: ${PG_PASSWORD}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-    networks:
-      - kreativ_net
-      - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tds-n8n.rule=Host(`n8n.${DOMAIN}`)"
-      - "traefik.http.routers.tds-n8n.entrypoints=https"
-      - "traefik.http.routers.tds-n8n.tls=true"
-      - "traefik.http.routers.tds-n8n.tls.certresolver=letsencrypt"
-      - "traefik.http.services.tds-n8n.loadbalancer.server.port=5678"
-
-  # ---------------------------------------------------------------------------
-  # INFRA: Postgres & Redis
-  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    container_name: t_infra_postgres
     restart: always
     environment:
       POSTGRES_USER: ${PG_USER}
@@ -204,18 +38,198 @@ services:
     networks:
       - kreativ_net
 
+  mariadb:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: frappe_kreativ
+      MYSQL_USER: frappe
+      MYSQL_PASSWORD: ${MARIADB_FRAPPE_PASSWORD}
+    volumes:
+      - frappe_mariadb_data:/var/lib/mysql
+    networks:
+      - kreativ_net
+
   redis:
     image: redis:7-alpine
-    container_name: t_infra_redis
     restart: always
     command: redis-server --requirepass ${REDIS_PASSWORD}
     networks:
       - kreativ_net
 
-  frappe_socketio:
-    image: frappe/frappe-socketio:latest
-    container_name: t_core_socketio
+  # --- FRAPPE SERVICES (LMS) ---
+
+  backend:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
+      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
+    environment:
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
+    networks:
+      - kreativ_net
+      - dokploy-network
+    depends_on:
+      - mariadb
+      - redis
+
+  scheduler:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench schedule
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
     networks:
       - kreativ_net
     depends_on:
-      - frappe_backend
+      - backend
+
+  worker-default:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue default
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - kreativ_net
+    depends_on:
+      - backend
+
+  worker-short:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue short
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - kreativ_net
+    depends_on:
+      - backend
+
+  worker-long:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: bench worker --queue long
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - kreativ_net
+    depends_on:
+      - backend
+
+  socketio:
+    image: frappe/frappe-socketio:latest
+    restart: always
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - kreativ_net
+      - dokploy-network
+    depends_on:
+      - backend
+
+  frappe_frontend:
+    image: tds-frappe-custom:latest
+    restart: unless-stopped
+    command: /usr/local/bin/nginx-entrypoint.sh
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: socketio:9000
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
+    networks:
+      - kreativ_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-lms.rule=Host(`lms.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-lms.entrypoints=websecure"
+      - "traefik.http.routers.tds-lms.tls=true"
+      - "traefik.http.routers.tds-lms.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-lms.loadbalancer.server.port=8080"
+      - "traefik.docker.network=dokploy-network"
+    depends_on:
+      - socketio
+
+  # --- RAG SERVICES (ANYTHINGLLM) ---
+
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    restart: always
+    environment:
+      - PORT=3001
+      - STORAGE_DIR=/app/server/storage
+    volumes:
+      - anythingllm_storage:/app/server/storage
+    networks:
+      - kreativ_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-rag.rule=Host(`rag.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-rag.entrypoints=websecure"
+      - "traefik.http.routers.tds-rag.tls=true"
+      - "traefik.http.routers.tds-rag.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-rag.loadbalancer.server.port=3001"
+      - "traefik.docker.network=dokploy-network"
+
+  # --- AUTOMATION SERVICES (N8N / EVOLUTION) ---
+
+  evolution-api:
+    image: atendai/evolution-api:latest
+    restart: always
+    environment:
+      SERVER_PORT: 8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/${EVOLUTION_DB}
+    volumes:
+      - evolution_data:/app/instances
+    networks:
+      - kreativ_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-evolution.rule=Host(`evolution.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-evolution.entrypoints=websecure"
+      - "traefik.http.routers.tds-evolution.tls=true"
+      - "traefik.http.routers.tds-evolution.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-evolution.loadbalancer.server.port=8080"
+      - "traefik.docker.network=dokploy-network"
+    depends_on:
+      - postgres
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    environment:
+      N8N_HOST: n8n.ipexdesenvolvimento.cloud
+      WEBHOOK_URL: https://n8n.ipexdesenvolvimento.cloud
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${PG_DATABASE}
+      DB_POSTGRESDB_USER: ${PG_USER}
+      DB_POSTGRESDB_PASSWORD: ${PG_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - kreativ_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-n8n.rule=Host(`n8n.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-n8n.entrypoints=websecure"
+      - "traefik.http.routers.tds-n8n.tls=true"
+      - "traefik.http.routers.tds-n8n.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-n8n.loadbalancer.server.port=5678"
+      - "traefik.docker.network=dokploy-network"
+    depends_on:
+      - postgres

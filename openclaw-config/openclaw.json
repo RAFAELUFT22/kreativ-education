@@ -5,8 +5,12 @@
         "api": "ollama",
         "baseUrl": "http://46.202.150.132:11434",
         "models": [
-          { "id": "gpt-oss:120b-cloud", "name": "GPT-OSS Cloud" },
-          { "id": "deepseek-v3.1:671b-cloud", "name": "DeepSeek Cloud" }
+          { "id": "gpt-oss:120b-cloud", "name": "GPT-OSS 120B Cloud" },
+          { "id": "gpt-oss:20b-cloud", "name": "GPT-OSS 20B Cloud" },
+          { "id": "deepseek-v3.1:671b-cloud", "name": "DeepSeek V3.1 671B Cloud" },
+          { "id": "qwen3-coder:480b-cloud", "name": "Qwen3 Coder 480B Cloud" },
+          { "id": "qwen3-vl:235b-cloud", "name": "Qwen3 VL 235B Cloud" },
+          { "id": "minimax-m2:cloud", "name": "MiniMax-M2 Cloud" }
         ]
       }
     }
