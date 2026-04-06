@@ -1,5 +1,18 @@
 # =============================================================================
-# PROJETO TDS — Manifesto Final (Full Connectivity & Worker Fix)
+# PROJETO TDS — Stack Completa (Todos os 5 Pilares)
+# Domínio: ipexdesenvolvimento.cloud
+# Proxy: Dokploy / Traefik (rede: dokploy-network)
+#
+# DEPLOY:
+#   1. cp .env.example .env  (preencha TODAS as variáveis)
+#   2. docker compose -f docker/docker-compose.tds.yml up -d
+#
+# PRIMEIRO BOOT:
+#   O serviço site_init cria o site Frappe, instala o LMS e compila o frontend.
+#   Leva ~10-15 min. Acompanhe: docker logs -f tds_site_init
+#   Os serviços backend/frontend ficam prontos assim que site_init terminar.
+#
+# RECURSOS MÍNIMOS: 8GB RAM, 2 vCPU, 50GB SSD
 # =============================================================================
 
 version: '3.8'
@@ -18,29 +31,55 @@ volumes:
   frappe_logs_data:
   frappe_assets_data:
   anythingllm_storage:
-  openclaw_data:
   postgres_data:
   redis_data:
   n8n_data:
   evolution_data:
+  chatwoot_storage:
+
+# ---------------------------------------------------------------------------
+# ÂNCORA: variáveis compartilhadas Chatwoot (app + sidekiq)
+# ---------------------------------------------------------------------------
+x-chatwoot-env: &chatwoot_env
+  RAILS_ENV: production
+  SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY}
+  FRONTEND_URL: https://chat.ipexdesenvolvimento.cloud
+  DEFAULT_LOCALE: pt_BR
+  FORCE_SSL: "false"
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/4
+  POSTGRES_HOST: postgres
+  POSTGRES_RECONNECT: "true"
+  POSTGRES_PORT: 5432
+  POSTGRES_DATABASE: chatwoot_db
+  POSTGRES_USERNAME: ${PG_USER}
+  POSTGRES_PASSWORD: ${PG_PASSWORD}
+  ACTIVE_STORAGE_SERVICE: local
+  INSTALLATION_ENV: docker
+  CW_AI_ENABLED: "true"
+  INSTALLATION_NAME: KreativEdu
+  LOG_LEVEL: warn
 
 services:
 
-  postgres:
-    image: postgres:16-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${PG_USER}
-      POSTGRES_PASSWORD: ${PG_PASSWORD}
-      POSTGRES_DB: ${PG_DATABASE}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - kreativ_net
+  # ===========================================================================
+  # INFRA BASE
+  # ===========================================================================
 
+  # ---------------------------------------------------------------------------
+  # MariaDB 10.6 — Banco de dados do Frappe
+  # Health check obrigatório: workers não sobem antes do DB estar pronto
+  # ---------------------------------------------------------------------------
   mariadb:
     image: mariadb:10.6
+    container_name: tds_mariadb
     restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+      - --max_allowed_packet=256M
+      - --innodb_buffer_pool_size=256M
     environment:
       MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
       MYSQL_DATABASE: frappe_kreativ
@@ -50,101 +89,311 @@ services:
       - frappe_mariadb_data:/var/lib/mysql
     networks:
       - kreativ_net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — N8N, Evolution API, Chatwoot
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tds_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DATABASE}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kreativ_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — compartilhado por todos os serviços (isolados por DB index)
+  # DB 0: Frappe cache | 1: Frappe queue | 2: Frappe socketio
+  # DB 3: Evolution    | DB 4: Chatwoot
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
+    container_name: tds_redis
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
     networks:
       - kreativ_net
 
-  # --- FRAPPE SERVICES (LMS) ---
+  # ===========================================================================
+  # FRAPPE INIT (restart: "no" — executam uma vez e saem)
+  # ===========================================================================
 
-  backend:
+  # ---------------------------------------------------------------------------
+  # Configurador — escreve common_site_config.json (Redis + DB endpoints)
+  # Deve completar ANTES de qualquer serviço Frappe iniciar.
+  # ---------------------------------------------------------------------------
+  configurator:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
-    restart: unless-stopped
+    container_name: tds_configurator
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host mariadb;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://:${REDIS_PASSWORD}@redis:6379/0";
+        bench set-config -g redis_queue "redis://:${REDIS_PASSWORD}@redis:6379/1";
+        bench set-config -g redis_socketio "redis://:${REDIS_PASSWORD}@redis:6379/2";
+        bench set-config -gp socketio_port 9000;
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+    networks:
+      - kreativ_net
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # Site Init — bench new-site + install-app lms + bench build (4GB RAM)
+  # Idempotente: usa ||true para não falhar se site já existir.
+  # Acompanhe: docker logs -f tds_site_init
+  # ---------------------------------------------------------------------------
+  site_init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tds-frappe-custom:latest
+    container_name: tds_site_init
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        echo "=== [1/5] Criando site Frappe ===" &&
+        bench new-site
+          --force
+          --db-host mariadb
+          --db-root-password ${MARIADB_ROOT_PASSWORD}
+          --admin-password ${FRAPPE_ADMIN_PASSWORD}
+          --no-mariadb-socket
+          ${FRAPPE_SITE_NAME} || echo "Site já existe, continuando..." &&
+        echo "=== [2/5] Instalando app LMS ===" &&
+        bench --site ${FRAPPE_SITE_NAME} install-app lms || echo "LMS já instalado, continuando..." &&
+        echo "=== [3/5] Compilando frontend (pode levar 10+ min) ===" &&
+        bench build --app lms &&
+        echo "=== [4/5] Configurando CORS e scheduler ===" &&
+        bench --site ${FRAPPE_SITE_NAME} set-config allow_cors 1 &&
+        bench --site ${FRAPPE_SITE_NAME} set-config cors_origin "*" &&
+        bench --site ${FRAPPE_SITE_NAME} enable-scheduler &&
+        bench --site ${FRAPPE_SITE_NAME} set-maintenance-mode off &&
+        echo "=== [5/5] Site pronto! Backend pode iniciar agora ==="
+    environment:
+      FRAPPE_SITE_NAME: ${FRAPPE_SITE_NAME}
+      FRAPPE_ADMIN_PASSWORD: ${FRAPPE_ADMIN_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
       - frappe_logs_data:/home/frappe/frappe-bench/logs
       - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
-    environment:
-      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
     networks:
       - kreativ_net
-      - dokploy-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
     depends_on:
-      - mariadb
-      - redis
+      configurator:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
 
-  scheduler:
+  # ===========================================================================
+  # PILAR 4: FRAPPE LMS — Runtime
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Backend — Gunicorn (API + servidor de aplicação)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
+    container_name: tds_backend
+    restart: unless-stopped
+    environment:
+      FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
+    volumes:
+      - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
+      - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
+    networks:
+      - kreativ_net
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    depends_on:
+      site_init:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
+  # Scheduler — jobs periódicos do Frappe
+  # ---------------------------------------------------------------------------
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tds-frappe-custom:latest
+    container_name: tds_scheduler
     restart: unless-stopped
     command: bench schedule
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
     networks:
       - kreativ_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     depends_on:
       - backend
 
+  # ---------------------------------------------------------------------------
+  # Workers — filas de jobs em background
+  # ---------------------------------------------------------------------------
   worker-default:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
+    container_name: tds_worker_default
     restart: unless-stopped
     command: bench worker --queue default
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
     networks:
       - kreativ_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       - backend
 
   worker-short:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
+    container_name: tds_worker_short
     restart: unless-stopped
     command: bench worker --queue short
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
     networks:
       - kreativ_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       - backend
 
   worker-long:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
+    container_name: tds_worker_long
     restart: unless-stopped
     command: bench worker --queue long
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
+      - frappe_logs_data:/home/frappe/frappe-bench/logs
     networks:
       - kreativ_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       - backend
 
+  # ---------------------------------------------------------------------------
+  # SocketIO — real-time WebSocket
+  # ---------------------------------------------------------------------------
   socketio:
     image: frappe/frappe-socketio:latest
+    container_name: tds_socketio
     restart: always
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
     networks:
       - kreativ_net
       - dokploy-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     depends_on:
       - backend
 
+  # ---------------------------------------------------------------------------
+  # Frontend — Nginx (ponto de entrada público do Frappe LMS)
+  # URL: https://lms.ipexdesenvolvimento.cloud
+  # ---------------------------------------------------------------------------
   frappe_frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: tds-frappe-custom:latest
+    container_name: tds_frappe_frontend
     restart: unless-stopped
     command: /usr/local/bin/nginx-entrypoint.sh
     environment:
       BACKEND: backend:8000
       SOCKETIO: socketio:9000
       FRAPPE_SITE_NAME_HEADER: ${FRAPPE_SITE_NAME}
+      UPSTREAM_REAL_IP_ADDRESS: "127.0.0.1"
+      UPSTREAM_REAL_IP_HEADER: "X-Forwarded-For"
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
     volumes:
       - frappe_sites_data:/home/frappe/frappe-bench/sites
       - frappe_assets_data:/home/frappe/frappe-bench/sites/assets
     networks:
       - kreativ_net
       - dokploy-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tds-lms.rule=Host(`lms.ipexdesenvolvimento.cloud`)"
@@ -156,15 +405,21 @@ services:
     depends_on:
       - socketio
 
-  # --- RAG SERVICES (ANYTHINGLLM) ---
-
+  # ===========================================================================
+  # PILAR 3: RAG / TUTOR COGNITIVO — AnythingLLM
+  # URL: https://rag.ipexdesenvolvimento.cloud
+  # ===========================================================================
   anythingllm:
     image: mintplexlabs/anythingllm:latest
+    container_name: tds_anythingllm
     restart: always
     environment:
-      - PORT=3001
-      - STORAGE_DIR=/app/server/storage
-      - DISABLE_TELEMETRY=true
+      PORT: 3001
+      STORAGE_DIR: /app/server/storage
+      DISABLE_TELEMETRY: "true"
+      LLM_PROVIDER: ${LLM_PROVIDER:-google}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     expose:
       - "3001"
     volumes:
@@ -172,18 +427,39 @@ services:
     networks:
       - kreativ_net
       - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-rag.rule=Host(`rag.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-rag.entrypoints=websecure"
+      - "traefik.http.routers.tds-rag.tls=true"
+      - "traefik.http.routers.tds-rag.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-rag.loadbalancer.server.port=3001"
+      - "traefik.docker.network=dokploy-network"
 
-  # --- AUTOMATION SERVICES (N8N / EVOLUTION) ---
-
+  # ===========================================================================
+  # PILAR 1: GATEWAY WHATSAPP — Evolution API
+  # URL: https://evolution.ipexdesenvolvimento.cloud
+  # ===========================================================================
   evolution-api:
     image: atendai/evolution-api:latest
+    container_name: tds_evolution
     restart: always
     environment:
       SERVER_PORT: 8080
+      AUTHENTICATION_TYPE: apikey
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
       DATABASE_ENABLED: "true"
       DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/${EVOLUTION_DB}
+      DATABASE_CONNECTION_URI: postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/${EVOLUTION_DB:-evolution_db}
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      REDIS_ENABLED: "true"
+      REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/3
+      CHATWOOT_ENABLED: "true"
+      CHATWOOT_MESSAGE_READ: "true"
+      CHATWOOT_BOT_CONTACT: "true"
+      GLOBAL_WEBHOOK_URL: ${EVOLUTION_GLOBAL_WEBHOOK:-}
+      LOG_LEVEL: WARN
     volumes:
       - evolution_data:/app/instances
     networks:
@@ -198,14 +474,26 @@ services:
       - "traefik.http.services.tds-evolution.loadbalancer.server.port=8080"
       - "traefik.docker.network=dokploy-network"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
+  # ===========================================================================
+  # PILAR 2: ORQUESTRADOR — N8N (imagem customizada com nodes Evolution + Chatwoot)
+  # URL: https://n8n.ipexdesenvolvimento.cloud
+  # ===========================================================================
   n8n:
-    image: n8nio/n8n:latest
+    build:
+      context: ./n8n
+      dockerfile: Dockerfile
+    image: tds-n8n-custom:latest
+    container_name: tds_n8n
     restart: always
     environment:
       N8N_HOST: n8n.ipexdesenvolvimento.cloud
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
       WEBHOOK_URL: https://n8n.ipexdesenvolvimento.cloud
+      N8N_EDITOR_BASE_URL: https://n8n.ipexdesenvolvimento.cloud
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
@@ -213,6 +501,15 @@ services:
       DB_POSTGRESDB_USER: ${PG_USER}
       DB_POSTGRESDB_PASSWORD: ${PG_PASSWORD}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_AI_ENABLED: "true"
+      N8N_COMMUNITY_PACKAGES_ENABLED: "true"
+      NODE_FUNCTION_ALLOW_BUILTIN: "*"
+      NODE_FUNCTION_ALLOW_EXTERNAL: "*"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168
+      NODE_OPTIONS: "--max-old-space-size=2048"
+      GENERIC_TIMEZONE: America/Araguaina
+      TZ: America/Araguaina
     volumes:
       - n8n_data:/home/node/.n8n
     networks:
@@ -227,4 +524,46 @@ services:
       - "traefik.http.services.tds-n8n.loadbalancer.server.port=5678"
       - "traefik.docker.network=dokploy-network"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
+  # ===========================================================================
+  # PILAR 5: INBOX HUMANA — Chatwoot v4.11
+  # URL: https://chat.ipexdesenvolvimento.cloud
+  # ===========================================================================
+  chatwoot-app:
+    image: chatwoot/chatwoot:v4.11.0
+    container_name: tds_chatwoot_app
+    restart: always
+    command: sh -c "rm -f /app/tmp/pids/server.pid && bundle exec rails s -p 3000 -b 0.0.0.0"
+    environment:
+      <<: *chatwoot_env
+    volumes:
+      - chatwoot_storage:/app/storage
+    networks:
+      - kreativ_net
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tds-chatwoot.rule=Host(`chat.ipexdesenvolvimento.cloud`)"
+      - "traefik.http.routers.tds-chatwoot.entrypoints=websecure"
+      - "traefik.http.routers.tds-chatwoot.tls=true"
+      - "traefik.http.routers.tds-chatwoot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.tds-chatwoot.loadbalancer.server.port=3000"
+      - "traefik.docker.network=dokploy-network"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  chatwoot-sidekiq:
+    image: chatwoot/chatwoot:v4.11.0
+    container_name: tds_chatwoot_sidekiq
+    restart: always
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    environment:
+      <<: *chatwoot_env
+    networks:
+      - kreativ_net
+    depends_on:
+      postgres:
+        condition: service_healthy
