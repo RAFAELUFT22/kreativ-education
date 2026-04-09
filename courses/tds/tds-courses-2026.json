@@ -1,0 +1,364 @@
+[
+  {
+    "slug": "agricultura-sustent-vel-sistemas-agroflorestais-2",
+    "title": "Agricultura Sustentável: Sistemas Agroflorestais",
+    "short_introduction": "Aprenda a produzir em equilíbrio com a natureza através dos Sistemas Agroflorestais (SAFs), transformando sua propriedade em um lugar de abundância e vida.",
+    "chapters": [
+      {
+        "title": "Fundamentos da Agricultura Sustentável",
+        "lessons": [
+          {
+            "title": "Introdução: A Nossa Terra é a Nossa Vida"
+          },
+          {
+            "title": "O que são os Sistemas Agroflorestais (SAFs)"
+          },
+          {
+            "title": "Tempo na Agrofloresta e Benefícios do SAF"
+          }
+        ]
+      },
+      {
+        "title": "Implantação da Agrofloresta",
+        "lessons": [
+          {
+            "title": "Planejando a Fartura: O Desenho da Agrofloresta"
+          },
+          {
+            "title": "Preparando o Chão: Plantio e Técnicas Especiais"
+          }
+        ]
+      },
+      {
+        "title": "Planejamento e Diagnóstico Rural",
+        "lessons": [
+          {
+            "title": "Conhecendo o Sítio: Mapa e Diagnóstico"
+          },
+          {
+            "title": "A Ferramenta FOFA e o Mapa do Futuro"
+          }
+        ]
+      },
+      {
+        "title": "Manejo e Viabilidade Econômica",
+        "lessons": [
+          {
+            "title": "As Podas: O Penteado da Floresta"
+          },
+          {
+            "title": "Produtos do Cerrado e Retorno Financeiro"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "audiovisual-e-produ-o-de-conte-do-digital-2",
+    "title": "Audiovisual e Produção de Conteúdo Digital",
+    "short_introduction": "Aprenda a planejar, gravar e editar vídeos usando seu celular para divulgar produtos e contar histórias da sua comunidade.",
+    "chapters": [
+      {
+        "title": "Pré-produção",
+        "lessons": [
+          {
+            "title": "Ideia e Roteiro"
+          },
+          {
+            "title": "Storyboard e Planejamento"
+          },
+          {
+            "title": "Equipamentos Básicos e Tipos de Câmera"
+          }
+        ]
+      },
+      {
+        "title": "Fundamentos do Audiovisual",
+        "lessons": [
+          {
+            "title": "O que é Audiovisual?"
+          },
+          {
+            "title": "História do Audiovisual"
+          },
+          {
+            "title": "Linguagem Audiovisual e Tipos de Produção"
+          }
+        ]
+      },
+      {
+        "title": "Gravação",
+        "lessons": [
+          {
+            "title": "Enquadramento e Ângulos de Câmera"
+          },
+          {
+            "title": "Iluminação e Captação de Áudio"
+          },
+          {
+            "title": "Direção, Filmagem e Continuidade"
+          }
+        ]
+      },
+      {
+        "title": "Pós-produção e Publicação",
+        "lessons": [
+          {
+            "title": "Edição de Vídeo: Corte, Trilha e Cor"
+          },
+          {
+            "title": "Exportação, Publicação e Marketing"
+          },
+          {
+            "title": "Direitos Autorais e Dicas para Iniciantes"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "finan-as-e-empreendedorismo-2",
+    "title": "Finanças e Empreendedorismo",
+    "short_introduction": "Educação financeira para a vida e o trabalho: do planejamento pessoal à gestão do seu negócio.",
+    "chapters": [
+      {
+        "title": "Conceitos Básicos de Educação Financeira",
+        "lessons": [
+          {
+            "title": "Introdução: Para Onde Vai o Seu Dinheiro?"
+          },
+          {
+            "title": "Conceitos Básicos: Receitas e Despesas"
+          },
+          {
+            "title": "O Dinheiro e as Trocas"
+          }
+        ]
+      },
+      {
+        "title": "Crédito, Dívidas e Poupança",
+        "lessons": [
+          {
+            "title": "Crédito: Aliado ou Vilão?"
+          },
+          {
+            "title": "Evitando Dívidas e Começando a Poupar"
+          }
+        ]
+      },
+      {
+        "title": "Orçamento e Planejamento Financeiro",
+        "lessons": [
+          {
+            "title": "Orçamento Familiar: Como Montar o Seu"
+          },
+          {
+            "title": "Planejamento Financeiro na Prática"
+          }
+        ]
+      },
+      {
+        "title": "Finanças do Negócio",
+        "lessons": [
+          {
+            "title": "Controle Financeiro em Pequenos Negócios"
+          },
+          {
+            "title": "Precificação e Ponto de Equilíbrio"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "educa-o-financeira-para-a-melhor-idade",
+    "title": "Educação Financeira para a Melhor Idade",
+    "short_introduction": "Guia prático para cuidar do seu dinheiro na terceira idade com segurança e autonomia.",
+    "chapters": [
+      {
+        "title": "Sua Aposentadoria e Seus Direitos",
+        "lessons": [
+          {
+            "title": "Introdução: Educação Financeira na Terceira Idade"
+          },
+          {
+            "title": "Fundamentos: Receitas, Despesas e Equilíbrio"
+          },
+          {
+            "title": "Orçamento Familiar e Aposentadoria"
+          }
+        ]
+      },
+      {
+        "title": "Proteção Financeira",
+        "lessons": [
+          {
+            "title": "Cuidado com Golpes e Fraudes"
+          },
+          {
+            "title": "Proteção Financeira e Crédito Seguro"
+          }
+        ]
+      },
+      {
+        "title": "Planejamento para a Terceira Idade",
+        "lessons": [
+          {
+            "title": "Planejamento Financeiro para a Melhor Idade"
+          },
+          {
+            "title": "Direitos da Pessoa Idosa e Considerações Finais"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "associativismo-e-cooperativismo-4",
+    "title": "Associativismo e Cooperativismo",
+    "short_introduction": "Aprenda a se organizar em associações e cooperativas para fortalecer sua comunidade.",
+    "chapters": [
+      {
+        "title": "Fundamentos: Associativismo e Cooperativismo",
+        "lessons": [
+          {
+            "title": "Introdução: A União que Transforma"
+          },
+          {
+            "title": "Conceitos e Diferenças"
+          },
+          {
+            "title": "O Cooperativismo no Tocantins"
+          }
+        ]
+      },
+      {
+        "title": "Como se Organizar",
+        "lessons": [
+          {
+            "title": "Criando uma Associação: Passo a Passo"
+          },
+          {
+            "title": "Direitos e Deveres dos Membros"
+          }
+        ]
+      },
+      {
+        "title": "Cooperativismo na Prática",
+        "lessons": [
+          {
+            "title": "Os 7 Princípios do Cooperativismo"
+          },
+          {
+            "title": "Benefícios e Exemplos Práticos no Tocantins"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "ia-no-meu-bolso-intelig-ncia-artificial-para-o-dia-a-dia-2",
+    "title": "IA no meu Bolso: Inteligência Artificial para o Dia a Dia",
+    "short_introduction": "Use ferramentas gratuitas de IA no celular para melhorar seu negócio e sua vida.",
+    "chapters": [
+      {
+        "title": "O que é Inteligência Artificial",
+        "lessons": [
+          {
+            "title": "Introdução: IA no Seu Dia a Dia"
+          },
+          {
+            "title": "Fundamentos: Como a IA Funciona"
+          }
+        ]
+      },
+      {
+        "title": "Ferramentas Gratuitas no Celular",
+        "lessons": [
+          {
+            "title": "Geração de Textos e Conteúdos de Divulgação"
+          },
+          {
+            "title": "Criação de Imagens e Materiais Visuais"
+          },
+          {
+            "title": "Atendimento ao Cliente e Pesquisa de Políticas"
+          }
+        ]
+      },
+      {
+        "title": "IA para seu Negócio",
+        "lessons": [
+          {
+            "title": "Organização Financeira com Suporte da IA"
+          },
+          {
+            "title": "Monitoramento de Clima e Condições Agrícolas"
+          }
+        ]
+      },
+      {
+        "title": "Uso Responsável da IA",
+        "lessons": [
+          {
+            "title": "Precauções Essenciais no Uso da IA"
+          },
+          {
+            "title": "Experiências Locais e Considerações Finais"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "sim-servi-o-de-inspe-o-municipal-para-pequenos-produtores-2",
+    "title": "SIM — Serviço de Inspeção Municipal para Pequenos Produtores",
+    "short_introduction": "Regularize seus produtos alimentares com o SIM e SIMA para vender com segurança.",
+    "chapters": [
+      {
+        "title": "Introdução ao SIM",
+        "lessons": [
+          {
+            "title": "Introdução: O que é o SIM e o SIMA"
+          },
+          {
+            "title": "Fundamentos: Regularização Sanitária"
+          }
+        ]
+      },
+      {
+        "title": "Processo de Registro",
+        "lessons": [
+          {
+            "title": "Passo a Passo para Regularização"
+          },
+          {
+            "title": "Como Organizar seu Negócio"
+          }
+        ]
+      },
+      {
+        "title": "Boas Práticas de Fabricação",
+        "lessons": [
+          {
+            "title": "Boas Práticas, Rotulagem e Transporte"
+          },
+          {
+            "title": "Dicas Práticas e Estratégias do Dia a Dia"
+          }
+        ]
+      },
+      {
+        "title": "SIMA e Consórcios Municipais",
+        "lessons": [
+          {
+            "title": "SIMA e Consórcios Municipais"
+          },
+          {
+            "title": "Experiências Locais no Tocantins"
+          }
+        ]
+      }
+    ]
+  }
+]
